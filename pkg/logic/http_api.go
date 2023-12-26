@@ -9,6 +9,7 @@
 package logic
 
 import (
+	"context"
 	_ "embed"
 	"encoding/json"
 	"html/template"
@@ -16,6 +17,7 @@ import (
 	"net"
 	"net/http"
 	"strings"
+	"time"
 
 	"github.com/q191201771/naza/pkg/nazajson"
 
@@ -28,10 +30,10 @@ import (
 var webUITpl string
 
 type HttpApiServer struct {
-	addr string
-	sm   *ServerManager
-
-	ln net.Listener
+	addr       string
+	sm         *ServerManager
+	httpServer *http.Server
+	ln         net.Listener
 }
 
 func NewHttpApiServer(addr string, sm *ServerManager) *HttpApiServer {
@@ -67,17 +69,33 @@ func (h *HttpApiServer) RunLoop() error {
 
 	var srv http.Server
 	srv.Handler = mux
+
+	h.httpServer = &srv
+
 	return srv.Serve(h.ln)
 }
 
 // TODO chef: dispose
 func (h *HttpApiServer) Dispose() {
-	if h.ln == nil {
+	if h.httpServer == nil {
 		return
 	}
-	if err := h.ln.Close(); err != nil {
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	if err := h.httpServer.Shutdown(ctx); err != nil {
 		Log.Error(err)
+
 	}
+	//if err := h.httpServer.Close(); err != nil {
+	//	Log.Error(err)
+	//}
+	//if h.ln == nil {
+	//	return
+	//}
+	//if err := h.ln.Close(); err != nil {
+	//	Log.Error(err)
+	//}
+
 }
 
 // ---------------------------------------------------------------------------------------------------------------------

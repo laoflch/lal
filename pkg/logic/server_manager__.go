@@ -9,12 +9,15 @@
 package logic
 
 import (
+	"context"
 	"flag"
 	"fmt"
+	"net"
 	"net/http"
 	_ "net/http/pprof"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 	"time"
 
@@ -168,7 +171,12 @@ func (sm *ServerManager) RunLoop() error {
 			//http.DefaultServeMux.Handle("/debug/fgprof", fgprof.Handler())
 			Log.Infof("start web pprof listen. addr=%s", sm.config.PprofConfig.Addr)
 			if err := sm.pprofServer.ListenAndServe(); err != nil {
-				Log.Error(err)
+				if err != http.ErrServerClosed {
+					Log.Error(err)
+
+				} else {
+					Log.Debug(err)
+				}
 			}
 		}()
 	}
@@ -218,7 +226,10 @@ func (sm *ServerManager) RunLoop() error {
 	if sm.httpServerManager != nil {
 		go func() {
 			if err := sm.httpServerManager.RunLoop(); err != nil {
-				Log.Error(err)
+				if err != http.ErrServerClosed {
+					Log.Error(err)
+
+				}
 			}
 		}()
 	}
@@ -229,7 +240,21 @@ func (sm *ServerManager) RunLoop() error {
 		}
 		go func() {
 			if err := sm.rtmpServer.RunLoop(); err != nil {
-				Log.Error(err)
+
+				if _, ok := err.(*net.OpError); !ok {
+					Log.Error(err)
+
+				} else {
+					if strings.Contains(err.(*net.OpError).Err.Error(), "use of closed network connection") {
+						Log.Debug(err)
+						//Log.Info("rtmp server closed")
+					} else {
+
+						Log.Error(err)
+
+					}
+
+				}
 			}
 		}()
 	}
@@ -240,7 +265,20 @@ func (sm *ServerManager) RunLoop() error {
 		if err == nil {
 			go func() {
 				if errRun := sm.rtmpsServer.RunLoop(); errRun != nil {
-					Log.Error(errRun)
+					if _, ok := errRun.(*net.OpError); !ok {
+						Log.Error(errRun)
+
+					} else {
+						if strings.Contains(errRun.(*net.OpError).Err.Error(), "use of closed network connection") {
+							Log.Debug(errRun)
+							//Log.Info("rtmp server closed")
+						} else {
+
+							Log.Error(errRun)
+
+						}
+
+					}
 				}
 			}()
 		}
@@ -252,7 +290,20 @@ func (sm *ServerManager) RunLoop() error {
 		}
 		go func() {
 			if err := sm.rtspServer.RunLoop(); err != nil {
-				Log.Error(err)
+				if _, ok := err.(*net.OpError); !ok {
+					Log.Error(err)
+
+				} else {
+					if strings.Contains(err.(*net.OpError).Err.Error(), "use of closed network connection") {
+						Log.Debug(err)
+						//Log.Info("rtmp server closed")
+					} else {
+
+						Log.Error(err)
+
+					}
+
+				}
 			}
 		}()
 	}
@@ -263,7 +314,21 @@ func (sm *ServerManager) RunLoop() error {
 		if err == nil {
 			go func() {
 				if errRun := sm.rtspsServer.RunLoop(); errRun != nil {
-					Log.Error(errRun)
+					if _, ok := errRun.(*net.OpError); !ok {
+						Log.Error(errRun)
+
+					} else {
+						if strings.Contains(errRun.(*net.OpError).Err.Error(), "use of closed network connection") {
+							Log.Debug(errRun)
+							//Log.Info("rtmp server closed")
+						} else {
+
+							Log.Error(errRun)
+
+						}
+
+					}
+
 				}
 			}()
 		}
@@ -275,7 +340,10 @@ func (sm *ServerManager) RunLoop() error {
 		}
 		go func() {
 			if err := sm.httpApiServer.RunLoop(); err != nil {
-				Log.Error(err)
+				if err != http.ErrServerClosed {
+					Log.Error(err)
+
+				}
 			}
 		}()
 	}
@@ -363,7 +431,14 @@ func (sm *ServerManager) Dispose() {
 	}
 
 	if sm.pprofServer != nil {
-		sm.pprofServer.Close()
+		//sm.pprofServer.Close()
+		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer cancel()
+		if err := sm.pprofServer.Shutdown(ctx); err != nil {
+			Log.Error(err)
+
+		}
+
 	}
 
 	if sm.httpApiServer != nil {
